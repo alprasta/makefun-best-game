@@ -12,14 +12,21 @@ const seed = Number(params.get('seed') || '1') || 1;
 const shot = params.get('shot'); // start | play | win | end — screenshot states
 
 function resize() {
-  // The canvas is sized in CSS pixels; the renderer works in canvas pixels
-  // and scales the world (VIEW_HEIGHT units tall) to fit the height.
+  // The canvas fills exactly the VISIBLE window: on mobile browsers the CSS
+  // 100vh (large viewport) can exceed window.innerHeight while the URL bar
+  // is visible, which would push the bottom touch controls (◀ ▶ JUMP) below
+  // the fold. Sizing the element itself from innerWidth/innerHeight keeps
+  // the backing store and the displayed size identical, so the drawing is
+  // never stretched and no button is ever off-screen.
+  canvas.style.width = `${window.innerWidth}px`;
+  canvas.style.height = `${window.innerHeight}px`;
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 }
 
 resize();
 window.addEventListener('resize', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 
 const input = new Input(canvas);
 const game = new Game(canvas, input, { seed, shot });

@@ -9,6 +9,15 @@
 // mouseInside, and during play on-screen buttons (◀ ▶ JUMP DASH ❚❚) drive the
 // same getters the keyboard does, tracked per touch identifier so two fingers
 // (hold ▶ + tap JUMP) work at once.
+//
+// Round 3 (2026-11-17): a click must only ever test points from ITS OWN tap.
+// The pause button's touchend fired a click that tested the START tap's stale
+// press point — START (y 548..606) and the pause menu's QUIT button
+// (y 555..611) overlap, so pausing quit the game to the title screen. Each
+// touch now carries its own press point in the map, and a touchend's click
+// uses only that touch's press and release points. A touch that starts on a
+// control button also keeps its zone for its whole lifetime: the state it
+// changed (e.g. pausing) must not turn it into a menu tap mid-touch.
 
 export class Input {
   constructor(canvas) {
@@ -17,6 +26,8 @@ export class Input {
     this.pressed = new Set(); // codes pressed since last frame (cleared each frame)
     this.mouseX = 0;
     this.mouseY = 0;
+    this.upX = 0; // release point of the latest tap (canvas pixels)
+    this.upY = 0;
     this.mouseInside = false;
     this.clicked = false; // a click happened since last frame
     this.anyKey = false; // any key pressed since last frame (for "press any key")
@@ -24,7 +35,10 @@ export class Input {
     // Touch state.
     this.touchUsed = false; // a touch has happened at least once
     this.touchControlsEnabled = false; // set by the game: true only during play
-    this._touches = new Map(); // touch identifier -> zone name or null (menu tap)
+    // touch identifier -> { zone, px, py }: the zone it started on (or null
+    // for a menu tap) and its press point in canvas pixels. Points belong to
+    // their own tap: a click never tests another tap's press point.
+    this._touches = new Map();
     this._vJump = false; // edge: jump button tapped since last frame
     this._vDash = false; // edge: dash button tapped since last frame
     this._vPause = false; // edge: pause button tapped since last frame
@@ -43,64 +57,87 @@ export class Input {
     window.addEventListener('blur', () => this.down.clear());
 
     canvas.addEventListener('mousemove', (e) => {
-      const r = canvas.getBoundingClientRect();
-      this.mouseX = e.clientX - r.left;
-      this.mouseY = e.clientY - r.top;
+      const p = this._point(e.clientX, e.clientY);
+      this.mouseX = p.x;
+      this.mouseY = p.y;
       this.mouseInside = true;
     });
     canvas.addEventListener('mouseleave', () => { this.mouseInside = false; });
     canvas.addEventListener('mousedown', (e) => {
-      const r = canvas.getBoundingClientRect();
-      this.mouseX = e.clientX - r.left;
-      this.mouseY = e.clientY - r.top;
+      const p = this._point(e.clientX, e.clientY);
+      this.mouseX = p.x;
+      this.mouseY = p.y;
+      this.upX = p.x;
+      this.upY = p.y;
       this.mouseInside = true;
       this.clicked = true;
     });
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
       this.touchUsed = true;
-      const r = canvas.getBoundingClientRect();
       for (const t of e.changedTouches) {
-        const x = t.clientX - r.left;
-        const y = t.clientY - r.top;
-        const zone = this.touchControlsEnabled ? this._zoneAt(x, y) : null;
-        this._touches.set(t.identifier, zone);
+        const p = this._point(t.clientX, t.clientY);
+        const zone = this.touchControlsEnabled ? this._zoneAt(p.x, p.y) : null;
+        this._touches.set(t.identifier, { zone, px: p.x, py: p.y });
         if (zone === 'jump') this._vJump = true;
         else if (zone === 'dash') this._vDash = true;
         else if (zone === 'pause') this._vPause = true;
         else if (zone === null) {
-          // Menu tap (or a tap outside the controls): behave like a mouse click.
-          this.mouseX = x;
-          this.mouseY = y;
+          // Menu tap: record the press point (for hover) — the click itself
+          // fires on touchend (below), using this tap's own points.
+          this.mouseX = p.x;
+          this.mouseY = p.y;
+          this.upX = p.x;
+          this.upY = p.y;
           this.mouseInside = true;
-          this.clicked = true;
         }
       }
     }, { passive: false });
     canvas.addEventListener('touchmove', (e) => {
       e.preventDefault();
-      const r = canvas.getBoundingClientRect();
       for (const t of e.changedTouches) {
-        if (!this._touches.has(t.identifier)) continue;
-        const x = t.clientX - r.left;
-        const y = t.clientY - r.top;
-        const prev = this._touches.get(t.identifier);
-        if (prev === null) {
-          // Dragging a menu tap: keep the hover position fresh.
-          this.mouseX = x;
-          this.mouseY = y;
-          continue;
-        }
-        // Sliding a finger on/off a control button reassigns it.
-        const zone = this.touchControlsEnabled ? this._zoneAt(x, y) : null;
-        this._touches.set(t.identifier, zone);
+        const rec = this._touches.get(t.identifier);
+        if (!rec || rec.zone === null) continue; // menu tap: keep its press point
+        // Sliding a finger on/off a control button reassigns it. The zone is
+        // decided by position alone here: a touch that started on a button
+        // keeps being a control touch even if it changed the game state
+        // (e.g. pausing) and the controls switched off mid-touch.
+        const p = this._point(t.clientX, t.clientY);
+        rec.zone = this._zoneAt(p.x, p.y);
       }
     }, { passive: false });
-    const endTouch = (e) => {
+    canvas.addEventListener('touchend', (e) => {
+      for (const t of e.changedTouches) {
+        const rec = this._touches.get(t.identifier);
+        this._touches.delete(t.identifier);
+        if (rec && rec.zone === null) {
+          // Menu tap released: the click counts when this tap's press point
+          // OR its release point is inside the button (clickedIn checks
+          // both), so a finger that rolls a few pixels cannot miss it.
+          const p = this._point(t.clientX, t.clientY);
+          this.mouseX = rec.px;
+          this.mouseY = rec.py;
+          this.upX = p.x;
+          this.upY = p.y;
+          this.mouseInside = true;
+          this.clicked = true;
+        }
+      }
+    });
+    canvas.addEventListener('touchcancel', (e) => {
       for (const t of e.changedTouches) this._touches.delete(t.identifier);
-    };
-    canvas.addEventListener('touchend', endTouch);
-    canvas.addEventListener('touchcancel', endTouch);
+    });
+  }
+
+  // Client (displayed) pixels -> canvas pixels. The canvas is styled
+  // 100vw/100vh, so on a mobile browser its displayed size can differ from
+  // its backing store while the URL bar is visible; without this scale every
+  // tap lands shifted from the button it visibly hit.
+  _point(clientX, clientY) {
+    const r = this.canvas.getBoundingClientRect();
+    const sx = r.width ? this.canvas.width / r.width : 1;
+    const sy = r.height ? this.canvas.height / r.height : 1;
+    return { x: (clientX - r.left) * sx, y: (clientY - r.top) * sy };
   }
 
   // On-screen touch buttons, in canvas pixels. Layout is shared by hit-testing
@@ -140,7 +177,7 @@ export class Input {
 
   // Is any active touch currently holding this control button?
   touchHeld(zone) {
-    for (const z of this._touches.values()) if (z === zone) return true;
+    for (const rec of this._touches.values()) if (rec.zone === zone) return true;
     return false;
   }
 
@@ -181,11 +218,18 @@ export class Input {
     this._vPause = false;
   }
 
-  // A clickable rectangle in canvas pixels. Returns true on a click inside it.
+  // A clickable rectangle in canvas pixels. Returns true on a click inside
+  // it. A tap counts when its press point OR its release point is inside:
+  // a finger rolls a little between press and release, and either end of
+  // that roll is a fair reading of where the user meant to tap.
   clickedIn(x, y, w, h) {
-    return this.clicked && this.mouseInside
-      && this.mouseX >= x && this.mouseX <= x + w
-      && this.mouseY >= y && this.mouseY <= y + h;
+    if (!this.clicked || !this.mouseInside) return false;
+    return this._inRect(this.mouseX, this.mouseY, x, y, w, h)
+      || this._inRect(this.upX, this.upY, x, y, w, h);
+  }
+
+  _inRect(px, py, x, y, w, h) {
+    return px >= x && px <= x + w && py >= y && py <= y + h;
   }
 
   hoverIn(x, y, w, h) {
