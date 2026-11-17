@@ -7,7 +7,7 @@
 import { LEVELS } from './config.js';
 
 export class Level {
-  constructor(index) {
+  constructor(index, beetleSpeed = 1) {
     const def = LEVELS[index];
     this.index = index;
     this.def = def;
@@ -28,7 +28,7 @@ export class Level {
     }));
     this.drops = def.drops.map((d) => ({ ...d, taken: false, bob: Math.random() * Math.PI * 2 }));
     this.beetles = def.beetles.map((b) => ({
-      ...b, dir: Math.random() < 0.5 ? 1 : -1, w: 40, h: 28, walk: Math.random() * 10,
+      ...b, speed: b.speed * beetleSpeed, dir: Math.random() < 0.5 ? 1 : -1, w: 40, h: 28, walk: Math.random() * 10,
     }));
     this.brambles = def.brambles.map((b) => ({ ...b, h: 26 }));
     this.bounce = def.bounce.map((b) => ({ ...b, w: 46, h: 26, squash: 0 }));

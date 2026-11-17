@@ -28,7 +28,7 @@ export function loadHistory() {
   }
 }
 
-// result: 'victory' | 'gameover' | 'quit'. grove is 1..3, dew is the run's
+// result: 'victory' | 'gameover' | 'quit'. grove is 1..4, dew is the run's
 // total dew collected. Returns the updated history (and saves it).
 export function recordRun(history, { result, grove, dew }) {
   const h = { ...history };
@@ -48,4 +48,26 @@ export function recordRun(history, { result, grove, dew }) {
     /* storage unavailable — the run still counts in memory */
   }
   return h;
+}
+
+// Difficulty choice, kept between visits on this device (same guarding as
+// the history: if storage is unavailable the game just plays on NORMAL).
+const DIFF_KEY = 'spore-sprint-difficulty-v1';
+
+export function loadDifficulty() {
+  try {
+    const d = localStorage.getItem(DIFF_KEY);
+    if (d === 'easy' || d === 'normal' || d === 'hard') return d;
+  } catch {
+    /* ignore */
+  }
+  return 'normal';
+}
+
+export function saveDifficulty(d) {
+  try {
+    localStorage.setItem(DIFF_KEY, d);
+  } catch {
+    /* ignore */
+  }
 }

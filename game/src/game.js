@@ -3,14 +3,14 @@
 // with drops, beetles, brambles and bounce mushrooms, the camera, and the
 // deterministic ?shot= states used for the entry's screenshots.
 
-import { VIEW_HEIGHT, MAX_HEARTS, COMBO_WINDOW, THEMES, worldScale } from './config.js';
+import { VIEW_HEIGHT, COMBO_WINDOW, THEMES, LEVELS, DIFFICULTIES, worldScale } from './config.js';
 import { Level } from './level.js';
 import { Player } from './player.js';
 import { Particles } from './particles.js';
 import { SoundBank } from './audio.js';
 import { Renderer } from './render.js';
 import { mulberry32 } from './random.js';
-import { loadHistory, recordRun } from './history.js';
+import { loadHistory, recordRun, loadDifficulty, saveDifficulty } from './history.js';
 
 export class Game {
   constructor(canvas, input, { seed = 1, shot = null } = {}) {
@@ -23,10 +23,13 @@ export class Game {
     this.shot = shot;
     this.state = 'title';
     this.levelIndex = 0;
-    this.level = new Level(0);
+    this.groveCount = LEVELS.length;
+    this.difficulty = loadDifficulty(); // EASY / NORMAL / HARD, picked on the title
+    this.maxHearts = DIFFICULTIES[this.difficulty].hearts;
+    this.level = new Level(0, DIFFICULTIES[this.difficulty].beetleSpeed);
     this.player = new Player(this.level.spawn.x, this.level.spawn.y);
     this.score = 0;
-    this.hearts = MAX_HEARTS;
+    this.hearts = this.maxHearts;
     this.combo = 0;
     this.comboTimer = 0;
     this.camX = 0;
@@ -56,7 +59,7 @@ export class Game {
 
   startRun() {
     this.score = 0;
-    this.hearts = MAX_HEARTS;
+    this.hearts = this.maxHearts;
     this.totalTime = 0;
     this.totalDrops = 0;
     this.deaths = 0;
@@ -64,9 +67,19 @@ export class Game {
     this.state = 'play';
   }
 
+  // The difficulty segments on the title screen. Hearts refill to the new
+  // maximum; the score multiplier and beetle speed apply from the next level.
+  setDifficulty(d) {
+    if (!DIFFICULTIES[d] || d === this.difficulty) return;
+    this.difficulty = d;
+    this.maxHearts = DIFFICULTIES[d].hearts;
+    this.hearts = this.maxHearts;
+    saveDifficulty(d);
+  }
+
   loadLevel(index) {
     this.levelIndex = index;
-    this.level = new Level(index);
+    this.level = new Level(index, DIFFICULTIES[this.difficulty].beetleSpeed);
     this.player.reset(this.level.spawn.x, this.level.spawn.y);
     this.combo = 0;
     this.comboTimer = 0;
@@ -162,7 +175,7 @@ export class Game {
         this.combo += 1;
         this.comboTimer = COMBO_WINDOW;
         const mult = this.comboMult();
-        const gained = 100 * mult;
+        const gained = Math.round(100 * mult * DIFFICULTIES[this.difficulty].scoreMult);
         this.score += gained;
         this.totalDrops += 1;
         this.sound.pickup(this.combo);
@@ -252,29 +265,31 @@ export class Game {
 
   _levelClear() {
     const level = this.level;
-    const timeBonus = Math.max(0, Math.round((level.parTime - level.time) * 15));
-    const heartBonus = this.hearts * 200;
-    const clearBonus = 500;
+    const sm = DIFFICULTIES[this.difficulty].scoreMult;
+    const timeBonus = Math.round(Math.max(0, Math.round((level.parTime - level.time) * 15)) * sm);
+    const heartBonus = Math.round(this.hearts * 200 * sm);
+    const clearBonus = Math.round(500 * sm);
     this.score += timeBonus + heartBonus + clearBonus;
     this.breakdown = [
-      ['Dew collected', `${level.dropsGot} × 100`],
+      ['Dew collected', `${level.dropsGot} × ${Math.round(100 * sm)}`],
       ['Clear bonus', `+${clearBonus}`],
       ['Time bonus', `+${timeBonus}`],
       ['Hearts bonus', `+${heartBonus}`],
     ];
     this.sound.levelClear();
     this.particles.burst(level.portal.x, level.portal.y, { count: 40, colors: ['#ffd166', '#5ff2ff', '#8cf5b0', '#ff9f1c'], speed: 5, life: 1.1 });
-    if (this.levelIndex < 2) {
+    if (this.levelIndex < this.groveCount - 1) {
       this.state = 'levelclear';
     } else {
       this.stats = [
         ['Time', this._fmtTotalTime()],
         ['Dew collected', String(this.totalDrops)],
         ['Falls & hits', String(this.deaths)],
-        ['Groves cleared', '3 / 3'],
+        ['Groves cleared', `${this.groveCount} / ${this.groveCount}`],
+        ['Difficulty', DIFFICULTIES[this.difficulty].label + (sm !== 1 ? `  (x${sm})` : '')],
       ];
       this.history = recordRun(this.history,
-        { result: 'victory', grove: 3, dew: this.totalDrops });
+        { result: 'victory', grove: this.groveCount, dew: this.totalDrops });
       this.state = 'victory';
       this.sound.win();
     }
@@ -330,7 +345,16 @@ export class Game {
     // Menus sit above the world. Buttons return their rects; clicks act here.
     if (this.state === 'title') {
       const btns = r.drawTitle(this, this.input, this.time);
-      if (this.input.clickedIn(btns.start.x, btns.start.y, btns.start.w, btns.start.h)
+      if (this.input.clickedIn(btns.diff.easy.x, btns.diff.easy.y, btns.diff.easy.w, btns.diff.easy.h)) {
+        this.sound.click();
+        this.setDifficulty('easy');
+      } else if (this.input.clickedIn(btns.diff.normal.x, btns.diff.normal.y, btns.diff.normal.w, btns.diff.normal.h)) {
+        this.sound.click();
+        this.setDifficulty('normal');
+      } else if (this.input.clickedIn(btns.diff.hard.x, btns.diff.hard.y, btns.diff.hard.w, btns.diff.hard.h)) {
+        this.sound.click();
+        this.setDifficulty('hard');
+      } else if (this.input.clickedIn(btns.start.x, btns.start.y, btns.start.w, btns.start.h)
         || this.input.pressed.has('Enter')) {
         this.sound.unlock();
         this.sound.click();
@@ -369,7 +393,7 @@ export class Game {
       if (this.input.clickedIn(btns.next.x, btns.next.y, btns.next.w, btns.next.h)
         || this.input.pressed.has('Enter')) {
         this.sound.click();
-        if (this.levelIndex < 2) {
+        if (this.levelIndex < this.groveCount - 1) {
           this.loadLevel(this.levelIndex + 1);
           this.state = 'play';
         } else {
@@ -381,7 +405,7 @@ export class Game {
       if (this.input.clickedIn(btns.retry.x, btns.retry.y, btns.retry.w, btns.retry.h)
         || this.input.pressed.has('Enter') || this.input.pressed.has('KeyR')) {
         this.sound.click();
-        this.hearts = MAX_HEARTS;
+        this.hearts = this.maxHearts;
         this.loadLevel(this.levelIndex);
         this.state = 'play';
       } else if (this.input.clickedIn(btns.title.x, btns.title.y, btns.title.w, btns.title.h)) {
@@ -439,16 +463,17 @@ export class Game {
       this.particles.floatText(1160, 300, '+200', '#ffd166', 20);
     } else if (this.shot === 'win') {
       this.state = 'victory';
-      this.loadLevel(2);
-      this.score = 4820;
-      this.totalTime = 187;
-      this.totalDrops = 33;
+      this.loadLevel(3);
+      this.score = 6100;
+      this.totalTime = 252;
+      this.totalDrops = 49;
       this.deaths = 2;
       this.stats = [
-        ['Time', '3:07'],
-        ['Dew collected', '33'],
+        ['Time', '4:12'],
+        ['Dew collected', '49'],
         ['Falls & hits', '2'],
-        ['Groves cleared', '3 / 3'],
+        ['Groves cleared', '4 / 4'],
+        ['Difficulty', 'NORMAL'],
       ];
     } else if (this.shot === 'end') {
       this.state = 'gameover';

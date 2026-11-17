@@ -1,4 +1,4 @@
-// Spore Sprint — configuration: constants, palette and the three hand-built groves.
+// Spore Sprint — configuration: constants, palette and the four hand-built groves.
 // One level is a set of platforms, dew drops, thorn beetles, brambles, bounce
 // mushrooms, moving platforms and the Bloom Portal the player must open.
 
@@ -23,6 +23,15 @@ export const PLAYER_H = 38;
 export const MAX_HEARTS = 3;
 export const COMBO_WINDOW = 2.5; // seconds between drops to keep the combo alive
 
+// Difficulty, picked on the title screen and kept between visits. It changes
+// hearts, beetle speed and the score multiplier — HARD pays 1.5x.
+export const DIFFICULTIES = {
+  easy: { label: 'EASY', hearts: 4, beetleSpeed: 0.75, scoreMult: 0.75 },
+  normal: { label: 'NORMAL', hearts: 3, beetleSpeed: 1, scoreMult: 1 },
+  hard: { label: 'HARD', hearts: 2, beetleSpeed: 1.35, scoreMult: 1.5 },
+};
+export const DIFFICULTY_ORDER = ['easy', 'normal', 'hard'];
+
 export const PALETTE = {
   pipBody: '#8cf5b0', // Pip the spore
   pipDark: '#3da873',
@@ -43,7 +52,7 @@ export const PALETTE = {
 export const THEMES = [
   {
     name: 'Dewcap Grove',
-    sub: 'Grove 1 of 3 — learn to hop',
+    sub: 'Grove 1 of 4 — learn to hop',
     skyTop: '#2b1b52',
     skyMid: '#4b2a6e',
     skyBottom: '#1d5c63',
@@ -59,7 +68,7 @@ export const THEMES = [
   },
   {
     name: 'Thorn Hollow',
-    sub: 'Grove 2 of 3 — the beetles get bold',
+    sub: 'Grove 2 of 4 — the beetles get bold',
     skyTop: '#1c1038',
     skyMid: '#3d1e5e',
     skyBottom: '#0f4d3a',
@@ -75,7 +84,7 @@ export const THEMES = [
   },
   {
     name: 'The Golden Bloom',
-    sub: 'Grove 3 of 3 — bloom the portal home',
+    sub: 'Grove 3 of 4 — bloom the portal home',
     skyTop: '#241040',
     skyMid: '#5e2350',
     skyBottom: '#8a5a1e',
@@ -89,6 +98,22 @@ export const THEMES = [
     stem: '#f7e8c9',
     accent: '#ffd166',
   },
+  {
+    name: 'Moonpetal Deep',
+    sub: 'Grove 4 of 4 — the garden\'s last secret',
+    skyTop: '#120a2e',
+    skyMid: '#3b1d5e',
+    skyBottom: '#274b63',
+    far: '#2a1c52',
+    mid: '#201240',
+    groundTop: '#b8a6ff',
+    ground: '#5a4a8a',
+    groundDark: '#3a2f5e',
+    cap: '#5ff2ff',
+    capSpot: '#e8feff',
+    stem: '#e8ddff',
+    accent: '#b8a6ff',
+  },
 ];
 
 // A platform: { x, y, w, h, mover?: { axis: 'x'|'y', from, to, speed } }
@@ -97,7 +122,7 @@ export const THEMES = [
 export const LEVELS = [
   {
     name: 'Dewcap Grove',
-    sub: 'Grove 1 of 3 — learn to hop',
+    sub: 'Grove 1 of 4 — learn to hop',
     width: 2600,
     parTime: 60,
     dropsNeeded: 6,
@@ -131,7 +156,7 @@ export const LEVELS = [
   },
   {
     name: 'Thorn Hollow',
-    sub: 'Grove 2 of 3 — the beetles get bold',
+    sub: 'Grove 2 of 4 — the beetles get bold',
     width: 3200,
     parTime: 75,
     dropsNeeded: 9,
@@ -175,7 +200,7 @@ export const LEVELS = [
   },
   {
     name: 'The Golden Bloom',
-    sub: 'Grove 3 of 3 — bloom the portal home',
+    sub: 'Grove 3 of 4 — bloom the portal home',
     width: 3600,
     parTime: 90,
     dropsNeeded: 11,
@@ -224,6 +249,66 @@ export const LEVELS = [
       { x: 1250, y: 554, w: 64 },
       { x: 2050, y: 554, w: 56 },
       { x: 2860, y: 554, w: 64 },
+    ],
+    bounce: [{ x: 1080, y: 554 }, { x: 1980, y: 554 }, { x: 3160, y: 554 }],
+  },
+  {
+    name: 'Moonpetal Deep',
+    sub: 'Grove 4 of 4 — the garden\'s last secret',
+    width: 4000,
+    parTime: 105,
+    dropsNeeded: 13,
+    spawn: { x: 90, y: 500 },
+    checkpoint: { x: 2120, y: 346 },
+    portal: { x: 3860, y: 540 },
+    platforms: [
+      { x: 0, y: 580, w: 500, h: 80 },
+      { x: 580, y: 580, w: 620, h: 80 },
+      { x: 1280, y: 580, w: 720, h: 80 },
+      { x: 2080, y: 580, w: 720, h: 80 },
+      { x: 2880, y: 580, w: 720, h: 80 },
+      { x: 3680, y: 580, w: 320, h: 80 },
+      { x: 220, y: 460, w: 120, h: 20 },
+      { x: 430, y: 360, w: 120, h: 20 },
+      { x: 700, y: 460, w: 130, h: 20 },
+      { x: 950, y: 350, w: 120, h: 20 },
+      { x: 1150, y: 470, w: 130, h: 20 },
+      { x: 1400, y: 360, w: 120, h: 20 },
+      { x: 1650, y: 470, w: 130, h: 20 },
+      { x: 1900, y: 380, w: 120, h: 20 },
+      { x: 2080, y: 380, w: 120, h: 20 },
+      { x: 2300, y: 460, w: 130, h: 20 },
+      { x: 2550, y: 350, w: 120, h: 20 },
+      { x: 2800, y: 470, w: 130, h: 20 },
+      { x: 3050, y: 360, w: 120, h: 20 },
+      { x: 3300, y: 470, w: 130, h: 20 },
+      { x: 3550, y: 360, w: 120, h: 20 },
+      { x: 820, y: 430, w: 120, h: 20, mover: { axis: 'x', from: 700, to: 1060, speed: 1.4 } },
+      { x: 1550, y: 400, w: 120, h: 20, mover: { axis: 'y', from: 320, to: 480, speed: 1.2 } },
+      { x: 2650, y: 420, w: 120, h: 20, mover: { axis: 'x', from: 2530, to: 2890, speed: 1.5 } },
+    ],
+    drops: [
+      { x: 260, y: 415 }, { x: 470, y: 315 }, { x: 620, y: 530 },
+      { x: 750, y: 415 }, { x: 990, y: 305 }, { x: 1190, y: 425 },
+      { x: 1440, y: 315 }, { x: 1690, y: 425 }, { x: 1940, y: 335 },
+      { x: 2120, y: 335 }, { x: 2340, y: 415 }, { x: 2590, y: 305 },
+      { x: 2840, y: 425 }, { x: 3090, y: 315 }, { x: 3340, y: 425 },
+      { x: 3590, y: 315 },
+    ],
+    beetles: [
+      { x: 640, y: 552, minX: 600, maxX: 880, speed: 2.1 },
+      { x: 1000, y: 552, minX: 900, maxX: 1180, speed: 2.2 },
+      { x: 1500, y: 552, minX: 1300, maxX: 1700, speed: 2.3 },
+      { x: 2300, y: 552, minX: 2120, maxX: 2500, speed: 2.2 },
+      { x: 3100, y: 552, minX: 2920, maxX: 3300, speed: 2.4 },
+      { x: 3750, y: 552, minX: 3700, maxX: 3960, speed: 2.3 },
+    ],
+    brambles: [
+      { x: 480, y: 554, w: 56 },
+      { x: 1250, y: 554, w: 64 },
+      { x: 2050, y: 554, w: 56 },
+      { x: 2860, y: 554, w: 64 },
+      { x: 3650, y: 554, w: 56 },
     ],
     bounce: [{ x: 1080, y: 554 }, { x: 1980, y: 554 }, { x: 3160, y: 554 }],
   },

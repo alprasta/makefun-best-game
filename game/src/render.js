@@ -4,7 +4,7 @@
 // stretch, the HUD, and every menu screen. All drawing is in two spaces:
 // world space (camera transform, units) and screen space (HUD, menus, pixels).
 
-import { VIEW_HEIGHT, PALETTE, worldScale } from './config.js';
+import { VIEW_HEIGHT, PALETTE, DIFFICULTIES, worldScale } from './config.js';
 import { mulberry32, range } from './random.js';
 
 const FONT = '"Trebuchet MS", Verdana, sans-serif';
@@ -27,13 +27,13 @@ export class Renderer {
     this.stars = [];
     for (let i = 0; i < 90; i++) {
       this.farLayer.push({
-        x: rng() * 3600, h: range(rng, 90, 260), w: range(rng, 60, 150),
+        x: rng() * 4200, h: range(rng, 90, 260), w: range(rng, 60, 150),
         capR: range(rng, 40, 90), lean: range(rng, -0.15, 0.15),
       });
     }
     for (let i = 0; i < 60; i++) {
       this.midLayer.push({
-        x: rng() * 3600, h: range(rng, 60, 170), w: range(rng, 50, 110),
+        x: rng() * 4200, h: range(rng, 60, 170), w: range(rng, 50, 110),
         capR: range(rng, 30, 65), lean: range(rng, -0.2, 0.2),
       });
     }
@@ -496,13 +496,14 @@ export class Renderer {
     ctx.textBaseline = 'alphabetic';
 
     // Hearts.
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < game.maxHearts; i++) {
       this._heart(28 + i * 34, 30, i < game.hearts);
     }
-    // Level name.
+    // Level name (+ difficulty, when it is not NORMAL).
     ctx.font = `bold 17px ${FONT}`;
     ctx.fillStyle = PALETTE.text;
-    ctx.fillText(level.name.toUpperCase(), 20, 66);
+    ctx.fillText(level.name.toUpperCase()
+      + (game.difficulty !== 'normal' ? `  •  ${DIFFICULTIES[game.difficulty].label}` : ''), 20, 66);
     ctx.font = `13px ${FONT}`;
     ctx.fillStyle = PALETTE.textDim;
     ctx.fillText(level.sub, 20, 84);
@@ -546,6 +547,39 @@ export class Renderer {
       ctx.textAlign = 'center';
       ctx.fillText(`COMBO x${mult}  (${game.combo})`, bx + 90, by + 18);
       ctx.textAlign = 'left';
+    }
+
+    // Level progress bar, bottom centre: Pip's dot, the checkpoint tick and
+    // the portal diamond, so the player always sees how far the grove runs.
+    // Desktop only (W >= 640): on touch the on-screen buttons own the bottom
+    // corners, and on narrow windows the hints at the corners collide.
+    if (!game.input.touchUsed && W >= 640) {
+      const barW = 260;
+      const barX = (W - barW) / 2;
+      const barY = canvas.height - 32;
+      const frac = Math.max(0, Math.min(1, game.player.cx / level.width));
+      ctx.fillStyle = 'rgba(10, 6, 24, 0.55)';
+      this._roundRect(barX, barY, barW, 6, 3);
+      ctx.fill();
+      ctx.fillStyle = '#8cf5b0';
+      this._roundRect(barX, barY, Math.max(6, barW * frac), 6, 3);
+      ctx.fill();
+      const cpX = barX + barW * (level.checkpoint.x / level.width);
+      ctx.fillStyle = 'rgba(253, 253, 255, 0.7)';
+      ctx.fillRect(cpX - 1, barY - 2, 2, 10);
+      const pX = barX + barW * (level.portal.x / level.width);
+      ctx.fillStyle = level.portal.open ? '#ffd166' : 'rgba(107, 111, 142, 0.9)';
+      ctx.beginPath();
+      ctx.moveTo(pX, barY - 4);
+      ctx.lineTo(pX + 5, barY + 3);
+      ctx.lineTo(pX, barY + 10);
+      ctx.lineTo(pX - 5, barY + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#fdfdff';
+      ctx.beginPath();
+      ctx.arc(barX + barW * frac, barY + 3, 4, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // Dash cooldown pips, bottom left. Hidden on touch devices: the on-screen
@@ -753,6 +787,36 @@ export class Renderer {
     ctx.fillStyle = 'rgba(12, 6, 28, 0.45)';
     ctx.fillRect(0, 0, W, H);
 
+    // Difficulty: a small segmented control at the top of the title screen
+    // (EASY / NORMAL / HARD). The choice sticks between visits; the game
+    // returns the three segment rects so clicks on them change it.
+    const diffW = 104;
+    const diffH = 30;
+    const diffY = 30;
+    const diffX0 = cx - (diffW * 3) / 2;
+    const diffRects = {};
+    ctx.textAlign = 'center';
+    ctx.font = `bold 11px ${FONT}`;
+    ctx.fillStyle = 'rgba(207, 200, 245, 0.75)';
+    ctx.fillText('DIFFICULTY', cx, diffY - 8);
+    ctx.fillStyle = 'rgba(10, 6, 24, 0.55)';
+    this._roundRect(diffX0, diffY, diffW * 3, diffH, 15);
+    ctx.fill();
+    for (const d of ['easy', 'normal', 'hard']) {
+      const x = diffX0 + ['easy', 'normal', 'hard'].indexOf(d) * diffW;
+      diffRects[d] = { x, y: diffY, w: diffW, h: diffH };
+      const selected = game.difficulty === d;
+      if (selected) {
+        ctx.fillStyle = '#ffd166';
+        this._roundRect(x + 2, diffY + 2, diffW - 4, diffH - 4, 13);
+        ctx.fill();
+      }
+      ctx.font = `bold 13px ${FONT}`;
+      ctx.fillStyle = selected ? '#1d2b26' : PALETTE.textDim;
+      ctx.fillText(DIFFICULTIES[d].label, x + diffW / 2, diffY + 20);
+    }
+    ctx.textAlign = 'left';
+
     // Bouncing Pip mascot.
     const bounceY = H * 0.30 + Math.sin(time * 2.4) * 10;
     ctx.save();
@@ -790,9 +854,9 @@ export class Renderer {
     // Tagline: the two original lines on wide screens; wrapped to fit on
     // narrow portrait screens, where the fixed lines ran off the edges.
     const tagLines = W >= 640
-      ? ['Guide Pip through 3 glowing groves — gather dew, dodge thorn beetles,',
+      ? ['Guide Pip through 4 glowing groves — gather dew, dodge thorn beetles,',
         'bloom the portal, and don\'t fall in the dark.']
-      : this._wrapLines('Guide Pip through 3 glowing groves — gather dew, dodge thorn beetles, bloom the portal, and don\'t fall in the dark.',
+      : this._wrapLines('Guide Pip through 4 glowing groves — gather dew, dodge thorn beetles, bloom the portal, and don\'t fall in the dark.',
         `15px ${FONT}`, W - 48);
     ctx.font = `16px ${FONT}`;
     ctx.textAlign = 'center';
@@ -843,6 +907,7 @@ export class Renderer {
       'Tip: dash right through thorn beetles!',
       'Tip: all the dew opens the Bloom Portal!',
       'Tip: hold the jump a beat longer to hop higher!',
+      'Tip: HARD mode pays 1.5x score — if you dare!',
     ];
     const tip = tips[Math.floor(time / 4) % tips.length];
     ctx.textAlign = 'center';
@@ -857,7 +922,7 @@ export class Renderer {
     const tipBase = H - 26 - (tipLines.length - 1) * 20;
     tipLines.forEach((ln, i) => ctx.fillText(ln, cx, tipBase + i * 20));
     ctx.textAlign = 'left';
-    return { start: btn, how };
+    return { start: btn, how, diff: diffRects };
   }
 
   drawHowTo(game, input) {
@@ -870,9 +935,10 @@ export class Renderer {
       ['Jump', 'SPACE  (hold for higher)'],
       ['Dash', 'SHIFT  — brief burst, dodges beetles'],
       ['Goal', 'Collect enough dew to open the portal, then reach it'],
-      ['Danger', 'Thorn beetles & brambles cost a heart. 3 hearts per run.'],
+      ['Danger', `Thorn beetles & brambles cost a heart. ${game.maxHearts} hearts on ${DIFFICULTIES[game.difficulty].label}.`],
       ['Combo', 'Grab dew quickly in a row to raise your multiplier'],
       ['Bounce', 'Orange mushrooms launch you sky-high'],
+      ['Difficulty', 'EASY 4 hearts · NORMAL 3 · HARD 2 — HARD pays 1.5x score'],
     ];
     // Narrow portrait panel: the value column (at px + 150) would run off
     // the panel, so each row becomes key-on-its-own-line plus the value
@@ -978,7 +1044,7 @@ export class Renderer {
     ctx.fillText(`SCORE  ${game.score}`, W / 2, H * 0.42 + ph + 44);
     ctx.textAlign = 'left';
     const next = this._button(W / 2 - 130, H * 0.42 + ph + 66, 260, 56,
-      game.levelIndex < 2 ? 'NEXT GROVE  ▶' : 'FINISH  ▶', input, true);
+      game.levelIndex < game.groveCount - 1 ? 'NEXT GROVE  ▶' : 'FINISH  ▶', input, true);
     return { next };
   }
 
