@@ -21,7 +21,8 @@ No build step, no network: `game/` is plain static files (canvas, ES modules, sy
 - **SPACE** — jump (hold for higher)
 - **SHIFT** — dash (brief burst, dodges beetles)
 - **P** — pause · **M** — mute · **R** — restart level
-- **Touch** — on-screen ◀ ▶ buttons to move, JUMP and DASH buttons, ❚❚ to pause (buttons appear after the first tap)
+- **Touch** — on-screen ◀ ▶ buttons to move, JUMP and DASH buttons, ❚❚ to pause (buttons appear after the first tap). Portrait and landscape both play: on tall screens the view zooms out so the whole garden stays visible.
+- **History** — runs, wins, best dew and furthest grove are saved on this device (localStorage) and shown on the title screen once you have finished a run.
 
 ## The game
 

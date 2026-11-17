@@ -3,6 +3,13 @@
 // mushrooms, moving platforms and the Bloom Portal the player must open.
 
 export const VIEW_HEIGHT = 640; // world units visible vertically; width follows the window
+export const MIN_VIEW_WIDTH = 640; // world units visible across, at least —
+// Portrait (tall) screens zoom out to this width instead of cropping the
+// world to a thin slice: landscape is unchanged (its width already exceeds
+// this), portrait shows ~640 units across so hazards ahead stay visible.
+export function worldScale(canvas) {
+  return Math.min(canvas.height / VIEW_HEIGHT, canvas.width / MIN_VIEW_WIDTH);
+}
 export const GRAVITY = 0.6;
 export const MOVE_SPEED = 4.3;
 export const JUMP_VELOCITY = -13.2;

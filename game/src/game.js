@@ -3,13 +3,14 @@
 // with drops, beetles, brambles and bounce mushrooms, the camera, and the
 // deterministic ?shot= states used for the entry's screenshots.
 
-import { VIEW_HEIGHT, MAX_HEARTS, COMBO_WINDOW, THEMES } from './config.js';
+import { VIEW_HEIGHT, MAX_HEARTS, COMBO_WINDOW, THEMES, worldScale } from './config.js';
 import { Level } from './level.js';
 import { Player } from './player.js';
 import { Particles } from './particles.js';
 import { SoundBank } from './audio.js';
 import { Renderer } from './render.js';
 import { mulberry32 } from './random.js';
+import { loadHistory, recordRun } from './history.js';
 
 export class Game {
   constructor(canvas, input, { seed = 1, shot = null } = {}) {
@@ -29,7 +30,6 @@ export class Game {
     this.combo = 0;
     this.comboTimer = 0;
     this.camX = 0;
-    this.camY = 0;
     this.time = 0;
     this.totalTime = 0;
     this.totalDrops = 0;
@@ -37,17 +37,21 @@ export class Game {
     this.runStart = 0;
     this.breakdown = [];
     this.stats = [];
+    this.history = loadHistory(); // play history, shown on the title screen
     this.lastTs = 0;
     this.viewW = 1024;
     this.shotApplied = false;
-    this.particles.seedAmbient(mulberry32(seed), 1600, VIEW_HEIGHT);
+    this.particles.seedAmbient(mulberry32(seed), canvas.width, canvas.height);
   }
 
   comboMult() { return Math.min(1 + Math.floor(this.combo / 3), 4); }
 
   viewWidthUnits() {
-    const scale = this.canvas.height / VIEW_HEIGHT;
-    return Math.max(960, Math.min(1400, this.canvas.width / scale));
+    // The true visible width in world units: in portrait the scale is
+    // width-driven, so the clamp's floor is the portrait minimum (640),
+    // not the old landscape floor (960).
+    const scale = worldScale(this.canvas);
+    return Math.max(640, Math.min(1400, this.canvas.width / scale));
   }
 
   startRun() {
@@ -67,7 +71,7 @@ export class Game {
     this.combo = 0;
     this.comboTimer = 0;
     this.camX = 0;
-    this.particles.seedAmbient(mulberry32(this.seed + index * 101), 1600, VIEW_HEIGHT);
+    this.particles.seedAmbient(mulberry32(this.seed + index * 101), this.canvas.width, this.canvas.height);
   }
 
   respawn() {
@@ -93,7 +97,7 @@ export class Game {
     else if (this.state === 'title' || this.state === 'howto') this.updateTitle(dt);
     // pause / levelclear / gameover / victory: frozen world, ambient still drifts.
 
-    this.particles.update(dt, this.viewWidthUnits(), VIEW_HEIGHT);
+    this.particles.update(dt, this.canvas.width, this.canvas.height);
     this.render(theme);
     this.input.endFrame();
   }
@@ -239,6 +243,8 @@ export class Game {
     this.deaths += cause === 'fell' ? 0 : 0; // deaths counted once, at game over
     if (this.hearts <= 0) {
       this.deaths += 1;
+      this.history = recordRun(this.history,
+        { result: 'gameover', grove: this.levelIndex + 1, dew: this.totalDrops });
       this.state = 'gameover';
       this.sound.gameOver();
     }
@@ -267,6 +273,8 @@ export class Game {
         ['Falls & hits', String(this.deaths)],
         ['Groves cleared', '3 / 3'],
       ];
+      this.history = recordRun(this.history,
+        { result: 'victory', grove: 3, dew: this.totalDrops });
       this.state = 'victory';
       this.sound.win();
     }
@@ -286,9 +294,14 @@ export class Game {
     const canvas = this.canvas;
     this.viewW = this.viewWidthUnits();
     const camX = Math.max(0, Math.min(this.level.width - this.viewW, this.camX));
+    // In portrait the visible height exceeds the world height: anchor the
+    // world to the screen bottom (camY < 0 shifts it down) instead of
+    // leaving the ground floating mid-screen. In landscape camY stays 0.
+    const viewH = canvas.height / worldScale(canvas);
+    const camY = Math.min(0, VIEW_HEIGHT - viewH);
 
     r.drawBackground(theme, camX, this.viewW, this.time);
-    r.beginWorld(camX, this.camY);
+    r.beginWorld(camX, camY);
     const level = this.level;
     for (const p of level.platforms) r.drawPlatform(theme, p, this.time);
     r.drawCheckpoint(level.checkpoint, this.time);
@@ -346,6 +359,8 @@ export class Game {
         this.state = 'play';
       } else if (this.input.clickedIn(btns.quit.x, btns.quit.y, btns.quit.w, btns.quit.h)) {
         this.sound.click();
+        this.history = recordRun(this.history,
+          { result: 'quit', grove: this.levelIndex + 1, dew: this.totalDrops });
         this.state = 'title';
         this.loadLevel(0);
       }

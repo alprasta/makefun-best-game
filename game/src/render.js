@@ -4,7 +4,7 @@
 // stretch, the HUD, and every menu screen. All drawing is in two spaces:
 // world space (camera transform, units) and screen space (HUD, menus, pixels).
 
-import { VIEW_HEIGHT, PALETTE } from './config.js';
+import { VIEW_HEIGHT, PALETTE, worldScale } from './config.js';
 import { mulberry32, range } from './random.js';
 
 const FONT = '"Trebuchet MS", Verdana, sans-serif';
@@ -93,7 +93,7 @@ export class Renderer {
 
   _drawSilhouettes(color, layer, offsetX, viewW, alpha) {
     const { ctx, canvas } = this;
-    const scale = canvas.height / VIEW_HEIGHT;
+    const scale = worldScale(canvas);
     const baseY = canvas.height * 0.98;
     ctx.fillStyle = color;
     ctx.globalAlpha = alpha;
@@ -128,7 +128,7 @@ export class Renderer {
 
   beginWorld(camX, camY) {
     const { ctx, canvas } = this;
-    const scale = canvas.height / VIEW_HEIGHT;
+    const scale = worldScale(canvas);
     ctx.save();
     const shX = this.shake > 0.2 ? (Math.random() - 0.5) * this.shake : 0;
     const shY = this.shake > 0.2 ? (Math.random() - 0.5) * this.shake : 0;
@@ -708,15 +708,40 @@ export class Renderer {
   }
 
   _titleText(text, x, y, size, color, stroke = 'rgba(20,8,40,0.9)') {
-    const { ctx } = this;
-    ctx.font = `bold ${size}px ${FONT}`;
+    const { ctx, canvas } = this;
+    // Shrink to fit: a fixed-size title (GROVE CLEARED!, THE GOLDEN BLOOM!)
+    // would run off the edges of a narrow portrait screen.
+    let s = size;
+    const maxW = canvas.width - 40;
+    ctx.font = `bold ${s}px ${FONT}`;
+    const w = ctx.measureText(text).width;
+    if (w > maxW) s = Math.max(10, Math.floor(s * maxW / w));
+    ctx.font = `bold ${s}px ${FONT}`;
     ctx.textAlign = 'center';
-    ctx.lineWidth = size / 6;
+    ctx.lineWidth = s / 6;
     ctx.strokeStyle = stroke;
     ctx.strokeText(text, x, y);
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
     ctx.textAlign = 'left';
+  }
+
+  // Greedy word wrap for a centred line of text: returns the lines that fit
+  // maxWidth at the given font. Used where a fixed sentence would otherwise
+  // run off a narrow portrait screen.
+  _wrapLines(text, font, maxWidth) {
+    const { ctx } = this;
+    ctx.font = font;
+    const words = text.split(' ');
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      const test = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(test).width <= maxWidth || !cur) cur = test;
+      else { lines.push(cur); cur = w; }
+    }
+    if (cur) lines.push(cur);
+    return lines;
   }
 
   drawTitle(game, input, time) {
@@ -762,11 +787,17 @@ export class Renderer {
 
     this._titleText('SPORE SPRINT', cx, H * 0.47, Math.min(84, W * 0.09), '#8cf5b0');
     this._titleText('a mushroom-garden dash', cx, H * 0.47 + 44, 24, '#ffd166');
+    // Tagline: the two original lines on wide screens; wrapped to fit on
+    // narrow portrait screens, where the fixed lines ran off the edges.
+    const tagLines = W >= 640
+      ? ['Guide Pip through 3 glowing groves — gather dew, dodge thorn beetles,',
+        'bloom the portal, and don\'t fall in the dark.']
+      : this._wrapLines('Guide Pip through 3 glowing groves — gather dew, dodge thorn beetles, bloom the portal, and don\'t fall in the dark.',
+        `15px ${FONT}`, W - 48);
     ctx.font = `16px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.textDim;
-    ctx.fillText('Guide Pip through 3 glowing groves — gather dew, dodge thorn beetles,', cx, H * 0.47 + 78);
-    ctx.fillText('bloom the portal, and don\'t fall in the dark.', cx, H * 0.47 + 100);
+    tagLines.forEach((ln, i) => ctx.fillText(ln, cx, H * 0.47 + 78 + i * 21));
     ctx.textAlign = 'left';
 
     const bw = 260;
@@ -774,11 +805,57 @@ export class Renderer {
     const btn = this._button(cx - bw / 2, H * 0.66, bw, bh, '▶  START', input, true);
     const how = this._button(cx - bw / 2, H * 0.66 + 72, bw, bh, 'HOW TO PLAY', input, false);
 
-    // Controls strip.
-    ctx.font = `14px ${FONT}`;
+    // Play history (only once the player has finished a run — a fresh
+    // install shows nothing here, so the title stays as screenshotted).
+    // A dark pill sits behind it so a bright dew drop drifting through the
+    // garden behind the title can never wash the text out.
+    const hist = game.history;
+    if (hist && hist.runs > 0) {
+      const line1 = `PLAY HISTORY  •  Runs ${hist.runs}  •  Wins ${hist.wins}  •  Best dew ${hist.bestDew}`;
+      const line2 = `Furthest: Grove ${hist.bestGrove}  •  Last: ${hist.lastResult}`;
+      const y1 = H * 0.66 + 152;
+      const y2 = y1 + 20;
+      ctx.font = `bold 13px ${FONT}`;
+      const w1 = ctx.measureText(line1).width;
+      ctx.font = `13px ${FONT}`;
+      const w2 = ctx.measureText(line2).width;
+      const pillW = Math.max(w1, w2) + 36;
+      ctx.fillStyle = 'rgba(10, 6, 24, 0.55)';
+      this._roundRect(cx - pillW / 2, y1 - 18, pillW, 48, 14);
+      ctx.fill();
+      ctx.textAlign = 'center';
+      ctx.font = `bold 13px ${FONT}`;
+      ctx.fillStyle = 'rgba(255, 209, 102, 0.9)';
+      ctx.fillText(line1, cx, y1);
+      ctx.font = `13px ${FONT}`;
+      ctx.fillStyle = PALETTE.textDim;
+      ctx.fillText(line2, cx, y2);
+      ctx.textAlign = 'left';
+    }
+
+    // Bottom strip: the old keyboard shorthand ("← → / A D  SPACE  SHIFT …")
+    // meant nothing on a phone, so the title now shows a friendly rotating
+    // tip in plain words instead. The full controls live in HOW TO PLAY;
+    // on a real keyboard the one-line key reference stays above the tip.
+    const tips = [
+      'Tip: grab dew in a row — your combo climbs to x4!',
+      'Tip: orange mushrooms launch you sky-high!',
+      'Tip: dash right through thorn beetles!',
+      'Tip: all the dew opens the Bloom Portal!',
+      'Tip: hold the jump a beat longer to hop higher!',
+    ];
+    const tip = tips[Math.floor(time / 4) % tips.length];
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(207, 200, 245, 0.85)';
-    ctx.fillText('← → / A D  move      SPACE  jump      SHIFT  dash      P  pause      M  mute', cx, H - 26);
+    if (!input.touchUsed && W >= 640) {
+      ctx.font = `14px ${FONT}`;
+      ctx.fillStyle = 'rgba(207, 200, 245, 0.85)';
+      ctx.fillText('← → / A D  move      SPACE  jump      SHIFT  dash      P  pause      M  mute', cx, H - 44);
+    }
+    ctx.font = `14px ${FONT}`;
+    ctx.fillStyle = 'rgba(255, 209, 102, 0.9)';
+    const tipLines = this._wrapLines(tip, `14px ${FONT}`, W - 48);
+    const tipBase = H - 26 - (tipLines.length - 1) * 20;
+    tipLines.forEach((ln, i) => ctx.fillText(ln, cx, tipBase + i * 20));
     ctx.textAlign = 'left';
     return { start: btn, how };
   }
@@ -788,7 +865,25 @@ export class Renderer {
     const W = canvas.width;
     const H = canvas.height;
     const pw = Math.min(560, W - 60);
-    const ph = 380;
+    const lines = [
+      ['Move', '← →  or  A / D'],
+      ['Jump', 'SPACE  (hold for higher)'],
+      ['Dash', 'SHIFT  — brief burst, dodges beetles'],
+      ['Goal', 'Collect enough dew to open the portal, then reach it'],
+      ['Danger', 'Thorn beetles & brambles cost a heart. 3 hearts per run.'],
+      ['Combo', 'Grab dew quickly in a row to raise your multiplier'],
+      ['Bounce', 'Orange mushrooms launch you sky-high'],
+    ];
+    // Narrow portrait panel: the value column (at px + 150) would run off
+    // the panel, so each row becomes key-on-its-own-line plus the value
+    // wrapped underneath, and the panel grows to fit.
+    const narrow = pw < 460;
+    const rows = narrow
+      ? lines.map(([k, v]) => ({ k, v: this._wrapLines(v, `14px ${FONT}`, pw - 72) }))
+      : null;
+    const ph = narrow
+      ? 84 + rows.reduce((s, r) => s + 24 + 20 * r.v.length + 8, 0) + 66 + 18
+      : 380;
     const px = (W - pw) / 2;
     const py = (H - ph) / 2;
     ctx.fillStyle = 'rgba(12, 6, 28, 0.6)';
@@ -800,25 +895,30 @@ export class Renderer {
     ctx.fillText('HOW TO PLAY', W / 2, py + 46);
     ctx.font = `16px ${FONT}`;
     ctx.fillStyle = PALETTE.text;
-    const lines = [
-      ['Move', '← →  or  A / D'],
-      ['Jump', 'SPACE  (hold for higher)'],
-      ['Dash', 'SHIFT  — brief burst, dodges beetles'],
-      ['Goal', 'Collect enough dew to open the portal, then reach it'],
-      ['Danger', 'Thorn beetles & brambles cost a heart. 3 hearts per run.'],
-      ['Combo', 'Grab dew quickly in a row to raise your multiplier'],
-      ['Bounce', 'Orange mushrooms launch you sky-high'],
-    ];
     let y = py + 84;
-    for (const [k, v] of lines) {
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#ffd166';
-      ctx.font = `bold 15px ${FONT}`;
-      ctx.fillText(k, px + 36, y);
-      ctx.fillStyle = PALETTE.text;
-      ctx.font = `15px ${FONT}`;
-      ctx.fillText(v, px + 150, y);
-      y += 30;
+    if (narrow) {
+      for (const r of rows) {
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffd166';
+        ctx.font = `bold 15px ${FONT}`;
+        ctx.fillText(r.k, px + 36, y);
+        y += 22;
+        ctx.fillStyle = PALETTE.text;
+        ctx.font = `14px ${FONT}`;
+        for (const ln of r.v) { ctx.fillText(ln, px + 36, y); y += 20; }
+        y += 10;
+      }
+    } else {
+      for (const [k, v] of lines) {
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffd166';
+        ctx.font = `bold 15px ${FONT}`;
+        ctx.fillText(k, px + 36, y);
+        ctx.fillStyle = PALETTE.text;
+        ctx.font = `15px ${FONT}`;
+        ctx.fillText(v, px + 150, y);
+        y += 30;
+      }
     }
     ctx.textAlign = 'center';
     const btn = this._button(W / 2 - 110, py + ph - 66, 220, 48, 'GOT IT', input, true);
@@ -854,8 +954,9 @@ export class Renderer {
     ctx.font = `17px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.textDim;
-    ctx.fillText(game.level.name + ' — the portal blooms behind you', W / 2, H * 0.30 + 32);
-    const pw = 420;
+    this._wrapLines(game.level.name + ' — the portal blooms behind you', `17px ${FONT}`, W - 48)
+      .forEach((ln, i) => ctx.fillText(ln, W / 2, H * 0.30 + 32 + i * 22));
+    const pw = Math.min(420, W - 40);
     const ph = 190;
     this._panel(W / 2 - pw / 2, H * 0.42, pw, ph);
     ctx.font = `17px ${FONT}`;
@@ -891,8 +992,12 @@ export class Renderer {
     ctx.font = `17px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.textDim;
-    ctx.fillText(`Pip ran out of hearts in ${game.level.name}.`, W / 2, H * 0.32 + 34);
-    ctx.fillText('The dew is still out there. Try again?', W / 2, H * 0.32 + 58);
+    // Two lines on wide screens (as before); wrapped to fit on narrow ones.
+    const goLines = W >= 640
+      ? [`Pip ran out of hearts in ${game.level.name}.`, 'The dew is still out there. Try again?']
+      : this._wrapLines(`Pip ran out of hearts in ${game.level.name}. The dew is still out there. Try again?`,
+        `17px ${FONT}`, W - 48);
+    goLines.forEach((ln, i) => ctx.fillText(ln, W / 2, H * 0.32 + 34 + i * 24));
     ctx.font = `bold 24px ${FONT}`;
     ctx.fillStyle = '#fdfdff';
     ctx.fillText(`SCORE  ${game.score}`, W / 2, H * 0.52);
@@ -920,8 +1025,9 @@ export class Renderer {
     ctx.font = `17px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.textDim;
-    ctx.fillText('Pip bloomed every portal. The garden glows again.', cx, H * 0.30 + 32);
-    const pw = 420;
+    this._wrapLines('Pip bloomed every portal. The garden glows again.', `17px ${FONT}`, W - 48)
+      .forEach((ln, i) => ctx.fillText(ln, cx, H * 0.30 + 32 + i * 22));
+    const pw = Math.min(420, W - 40);
     const ph = 190;
     this._panel(cx - pw / 2, H * 0.42, pw, ph);
     ctx.font = `17px ${FONT}`;
