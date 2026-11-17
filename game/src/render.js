@@ -548,25 +548,69 @@ export class Renderer {
       ctx.textAlign = 'left';
     }
 
-    // Dash cooldown pips, bottom left.
-    const ready = game.player.dashCooldown <= 0;
-    ctx.font = `bold 12px ${FONT}`;
-    ctx.fillStyle = ready ? '#8cf5b0' : PALETTE.textDim;
-    ctx.fillText(ready ? 'DASH READY  [SHIFT]' : 'DASH…', 20, canvas.height - 18);
-    if (!ready) {
-      const frac = 1 - game.player.dashCooldown / 1.1;
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fillRect(20, canvas.height - 14, 110, 5);
-      ctx.fillStyle = '#8cf5b0';
-      ctx.fillRect(20, canvas.height - 14, 110 * frac, 5);
-    }
+    // Dash cooldown pips, bottom left. Hidden on touch devices: the on-screen
+    // buttons occupy the bottom corners there.
+    if (!game.input.touchUsed) {
+      const ready = game.player.dashCooldown <= 0;
+      ctx.font = `bold 12px ${FONT}`;
+      ctx.fillStyle = ready ? '#8cf5b0' : PALETTE.textDim;
+      ctx.fillText(ready ? 'DASH READY  [SHIFT]' : 'DASH…', 20, canvas.height - 18);
+      if (!ready) {
+        const frac = 1 - game.player.dashCooldown / 1.1;
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillRect(20, canvas.height - 14, 110, 5);
+        ctx.fillStyle = '#8cf5b0';
+        ctx.fillRect(20, canvas.height - 14, 110 * frac, 5);
+      }
 
-    // Mute hint, bottom right.
-    ctx.font = `12px ${FONT}`;
-    ctx.fillStyle = 'rgba(207, 200, 245, 0.7)';
-    ctx.textAlign = 'right';
-    ctx.fillText(game.sound.muted ? 'MUTED  [M]' : '[M] SOUND   [P] PAUSE', W - 20, canvas.height - 18);
-    ctx.textAlign = 'left';
+      // Mute hint, bottom right.
+      ctx.font = `12px ${FONT}`;
+      ctx.fillStyle = 'rgba(207, 200, 245, 0.7)';
+      ctx.textAlign = 'right';
+      ctx.fillText(game.sound.muted ? 'MUTED  [M]' : '[M] SOUND   [P] PAUSE', W - 20, canvas.height - 18);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // On-screen touch controls for play: ◀ ▶ bottom-left, DASH / JUMP
+  // bottom-right, pause in the middle. Layout comes from input.touchZones(),
+  // the same rects hit-testing uses. Shown only after the first touch, so
+  // deterministic screenshots (?shot=) never include them.
+  drawTouchControls(game, input) {
+    const { ctx } = this;
+    const z = input.touchZones();
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const draw = (r, label, sub) => {
+      if (!r) return;
+      const held = input.touchHeld(
+        r === z.left ? 'left' : r === z.right ? 'right'
+          : r === z.jump ? 'jump' : r === z.dash ? 'dash' : 'pause');
+      ctx.globalAlpha = held ? 0.85 : 0.45;
+      ctx.fillStyle = '#453f63';
+      this._roundRect(r.x, r.y, r.w, r.h, 14);
+      ctx.fill();
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      this._roundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 13);
+      ctx.stroke();
+      ctx.fillStyle = '#fdfdff';
+      ctx.font = `bold 22px ${FONT}`;
+      ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + (sub ? -8 : 1));
+      if (sub) {
+        ctx.font = `11px ${FONT}`;
+        ctx.fillStyle = 'rgba(207,200,245,0.85)';
+        ctx.fillText(sub, r.x + r.w / 2, r.y + r.h / 2 + 14);
+      }
+    };
+    draw(z.left, '◀');
+    draw(z.right, '▶');
+    draw(z.dash, 'DASH', 'SHIFT');
+    draw(z.jump, 'JUMP', 'SPACE');
+    draw(z.pause, '❚❚');
+    ctx.restore();
   }
 
   _heart(x, y, full) {

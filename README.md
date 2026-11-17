@@ -21,6 +21,7 @@ No build step, no network: `game/` is plain static files (canvas, ES modules, sy
 - **SPACE** — jump (hold for higher)
 - **SHIFT** — dash (brief burst, dodges beetles)
 - **P** — pause · **M** — mute · **R** — restart level
+- **Touch** — on-screen ◀ ▶ buttons to move, JUMP and DASH buttons, ❚❚ to pause (buttons appear after the first tap)
 
 ## The game
 

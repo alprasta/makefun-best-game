@@ -84,6 +84,9 @@ export class Game {
     this.time += dt;
     // A pause pressed this frame must not also resume in the same frame's menu.
     this._justPaused = false;
+    // On-screen touch buttons are only live during play; on menus every tap is
+    // a menu click instead.
+    this.input.touchControlsEnabled = this.state === 'play';
     const theme = THEMES[this.levelIndex];
 
     if (this.state === 'play') this.updatePlay(dt);
@@ -309,6 +312,7 @@ export class Game {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (this.state === 'play' || this.state === 'pause') r.drawHUD(this);
+    if (this.state === 'play' && this.input.touchUsed) r.drawTouchControls(this, this.input);
 
     // Menus sit above the world. Buttons return their rects; clicks act here.
     if (this.state === 'title') {
